@@ -14,7 +14,7 @@ setup(
             'migratego2z=__main__:main'
         ]
     },
-    install_requires=['imapclient', 'mysql-connector', 'icalendar', 'sqlalchemy'],
+    install_requires=['imapclient', 'mysql-connector', 'vobject', 'sqlalchemy'],
     data_files=[('/etc/migratego2z', ['migratego2z.ini'])]
 
 )

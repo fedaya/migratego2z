@@ -10,7 +10,6 @@ def main():
     parser.add_argument('--config', '-c', help='configuration file for import', nargs=1,
                         default=['/etc/migratego2z/migratego2z.ini'])
     args = parser.parse_args()
-    print(args.config)
     prog = migratego2z.Main(args.rootDir[0], args.domain[0], args.config[0])
     prog.main()
 
