@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from imapclient import imap_utf7
 from typing import List
+from typing import Dict
 from migratego2z.go_db import EmAccount
 import re
 import os
@@ -160,3 +161,31 @@ def extract_folders(email_account: EmAccount, base_folder: str) -> MailDir:
                 else:
                     matches = None
     return base_mail_dir
+
+
+def import_mails(email_accounts: List[EmAccount], supp_email: Dict[int, List[str]], supp_email_addresses: List[str], root_path: str, filename: str = None) \
+        -> str:
+    import_str = ''
+    for email in email_accounts:
+        [user, domain] = email.username.split('@')
+        tmp_str = ''
+        if email.username in supp_email_addresses and email.user_id in supp_email:
+            sharer = email.username
+            users_sup_email = supp_email[email.user_id]
+            for user in users_sup_email:
+                import_str += 'selectMailbox -A ' + sharer + '\n'
+                import_str += 'modifyFolderGrant / account ' + user + ' rwixd\n'
+                import_str += 'selectMailbox -A ' + user + '\n'
+                import_str += 'createMountpoint /' + sharer + ' ' + sharer + '\n'
+        else:
+            import_str += 'selectMailbox -A ' + user + '@' + domain + '\n'
+            import_str += tmp_str
+            user_maildir = extract_folders(email, root_path)
+            import_str += user_maildir.get_tree_creation([email.sent, email.drafts, email.trash, email.spam, '.'])
+            import_str += user_maildir.get_tree_messages(email, root_path)
+
+    if filename is not None:
+        user_import = open(filename, 'wb')
+        user_import.write(import_str.encode('utf-8'))
+        user_import.close()
+    return import_str

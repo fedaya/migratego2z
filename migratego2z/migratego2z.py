@@ -2,17 +2,21 @@
 # -*- coding: utf-8 -*-
 
 import sqlalchemy
-from typing import List
-from typing import Dict
-from migratego2z import go_db
+from os import path
+import os
+import shutil
+
+from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook
 from migratego2z.config import Config
-from migratego2z.adapters import users, maildir
+from migratego2z.adapters import users, maildir, addressbook
 
 
 class Main:
     def __init__(self, mdirs: str, domain: str, config: str):
         self.users = []
         self.emailAccounts = []
+        self.addressBooks = []
+        self.contacts = []
         self.config = Config(config)
         if mdirs is not None:
             self.path = mdirs
@@ -22,55 +26,66 @@ class Main:
             self.domain = domain
         else:
             self.domain = self.config.domain
+    def create_temp_structure(self) -> str:
+        base_name = '/tmp/migratego2z'
+        i = 0
+        while path.exists(base_name + str(i)):
+            i += 1
+        base_name += str(i)
+        os.mkdir(base_name)
+        os.mkdir(path.join(base_name, 'contacts'))
+        os.mkdir(path.join(base_name, 'calendars'))
+        return base_name
+
+    def delete_temp_structure(self, base_name:str):
+        shutil.rmtree(base_name)
+
 
     def main(self):
         engine = sqlalchemy.create_engine('mysql+mysqlconnector://' + self.config.db.user + ':' + self.config.db.password +
                                           '@' + self.config.db.host + '/' + self.config.db.database)
         conn = engine.connect()
-        s = sqlalchemy.select([go_db.EmAccount]).where(go_db.EmAccount.username.like('%@'+self.config.domain))
+        s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@'+self.config.domain))
         result = conn.execute(s)
         userids=[]
         for row in result:
             self.emailAccounts.append(row)
             userids.append(row.user_id)
         result.close()
-        s = sqlalchemy.select([go_db.GoUser]).where(go_db.GoUser.id.in_(userids))
+        s = sqlalchemy.select([GoUser]).where(GoUser.id.in_(userids))
         result = conn.execute(s)
         for row in result:
             self.users.append(row)
         result.close()
-        users_str, supp_email, supp_email_addresses = users.create_users(self.users, self.config.domain, self.config, 'user_creation')
-        # print(users_str)
-        print('========================================================================================================================')
-        mails_str = self.import_mails(supp_email, supp_email_addresses, 'mail_copy')
-        # print(mails_str)
-# Dict[int, List[str]], List[int]
+        # Create the users
+        base_folder = self.create_temp_structure()
+        users_str, supp_email, supp_email_addresses = users.create_users(self.users, self.config.domain, self.config,
+                                                                         path.join(base_folder, 'user_creation'))
+        # Create the folders and import the mails for all users
+        mails_str = maildir.import_mails(self.emailAccounts, supp_email, supp_email_addresses,
+                                      self.config.path, path.join(base_folder, 'mail_copy'))
+        # Create the folders and imports the contacts
+        addressbooks_str = self.import_addressbooks(conn, base_folder)
+        conn.close()
 
-    def import_mails(self, supp_email: Dict[int, List[str]], supp_email_addresses: List[str], filename: str = None) \
-            -> str:
-        import_str = ''
-        for email in self.emailAccounts:
-            [user, domain] = email.username.split('@')
-            prefix = None
-            tmp_str = ''
-            if email.username in supp_email_addresses and email.user_id in supp_email:
-                sharer = email.username
-                users_sup_email = supp_email[email.user_id]
-                for user in users_sup_email:
-                    import_str += 'selectMailbox -A ' + sharer + '\n'
-                    import_str += 'modifyFolderGrant / account ' + user + ' rwixd\n'
-                    import_str += 'selectMailbox -A ' + user + '\n'
-                    import_str += 'createMountpoint /' + sharer + ' ' + sharer + '\n'
-            else:
-                import_str += 'selectMailbox -A ' + user + '@' + domain + '\n'
-                import_str += tmp_str
-                user_maildir = maildir.extract_folders(email, self.config.path)
-                import_str += user_maildir.get_tree_creation([email.sent, email.drafts, email.trash, email.spam, '.'])
-                import_str += user_maildir.get_tree_messages(email, self.config.path)
+    def import_addressbooks(self, conn: sqlalchemy.engine.Connection, base_folder:str) -> str:
+        addressbooks_file = open(path.join(base_folder, 'contacts_copy'), 'wb')
+        addressbooks_str = ''
+        for user in self.emailAccounts:
+            s = sqlalchemy.select([AbAddressbook]).where(AbAddressbook.user_id == user.user_id)
+            result = conn.execute(s)
+            for row in result:
+                s2 = sqlalchemy.select([AbContact, AbCompany.name], AbContact.addressbook_id == row.id,
+                                       AbContact.__table__.outerjoin(AbCompany, AbContact.company_id == AbCompany.id))
+                r2 = conn.execute(s2)
+                addressbooks_str += addressbook.generate_vcf(r2, path.join(base_folder, 'contacts', 'contacts'),
+                                                             row.name, user.username)
+                r2.close()
+            result.close()
+        addressbooks_file.write(addressbooks_str.encode('utf-8'))
+        addressbooks_file.close()
+        return addressbooks_str
 
-        if filename is not None:
-            user_import = open(filename, 'wb')
-            user_import.write(import_str.encode('utf-8'))
-            user_import.close()
-        return import_str
+
+
 

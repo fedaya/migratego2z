@@ -60,7 +60,6 @@ def create_users(users: List[GoUser], domain: str, config: Config, filename: str
         for match in matches:
             if r'{CRYPT}' not in match:
                 return_string = re.sub(match, '', return_string)
-    print(return_string)
     if filename is not None:
         user_creation_file = open(filename, 'wb')
         user_creation_file.write(return_string.encode('utf-8'))
