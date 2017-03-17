@@ -89,7 +89,7 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
 
     return_string = "selectMailbox -A " + username + "\n"
     return_string += "createFolder --view contact \'/Contacts/" + contactbookname + "\'\n"
-    return_string += "postRestUrl \"/contacts/" + urllib.parse.quote(string=contactbookname,
+    return_string += "postRestUrl \"/Contacts/" + urllib.parse.quote(string=contactbookname,
                                                                      encoding='ascii', errors='xmlcharrefreplace') +\
                      "?fmt=vcf\" \"" + filename + "\"\n"
     return return_string

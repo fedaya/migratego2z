@@ -8,7 +8,7 @@ import shutil
 
 from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook
 from migratego2z.config import Config
-from migratego2z.adapters import users, maildir, addressbook
+from migratego2z.adapters import users, maildir, addressbook, calendar
 
 
 class Main:
@@ -40,7 +40,6 @@ class Main:
     def delete_temp_structure(self, base_name:str):
         shutil.rmtree(base_name)
 
-
     def main(self):
         engine = sqlalchemy.create_engine('mysql+mysqlconnector://' + self.config.db.user + ':' + self.config.db.password +
                                           '@' + self.config.db.host + '/' + self.config.db.database)
@@ -66,6 +65,7 @@ class Main:
                                       self.config.path, path.join(base_folder, 'mail_copy'))
         # Create the folders and imports the contacts
         addressbooks_str = self.import_addressbooks(conn, base_folder)
+        calendar_str = self.import_calendars(conn, base_folder)
         conn.close()
 
     def import_addressbooks(self, conn: sqlalchemy.engine.Connection, base_folder:str) -> str:
@@ -86,6 +86,14 @@ class Main:
         addressbooks_file.close()
         return addressbooks_str
 
-
+    def import_calendars(self, conn: sqlalchemy.engine.Connection, base_folder: str) -> str:
+        calendars_file = open(path.join(base_folder, 'calendars_copy'), 'wb')
+        calendars_str = ''
+        for user in self.emailAccounts:
+            calendars_str += calendar.export_calendars_from_user(conn, user, os.path.join(base_folder, 'calendars',
+                                                                                          'calendars'))
+        calendars_file.write(calendars_str.encode('utf-8'))
+        calendars_file.close()
+        return calendars_str
 
 
