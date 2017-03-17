@@ -2,7 +2,6 @@
 from migratego2z.go_db import GoUser, EmAccount
 from typing import List
 from typing import Dict
-from migratego2z.config import Config
 import string
 import random
 import re
@@ -13,7 +12,7 @@ def pw_gen(size=8, chars=string.ascii_letters + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
-def create_users(users: List[GoUser], domain: str, config: Config, filename: str = None) \
+def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine.Connection, filename: str = None) \
         -> (str, Dict[int, List[str]], List[str]):
     """
     Return Zimbra's creation script for the users specified in parameter
@@ -21,7 +20,7 @@ def create_users(users: List[GoUser], domain: str, config: Config, filename: str
 
     :param users: List of users you want to create
     :param domain: E-mail domain for target user
-    :param config: The config object
+    :param connection: The db connection
     :param filename: if specified, this file is written with Zimbra's creation script
     :return: Zimbra's creation script as a string
     """
@@ -34,7 +33,7 @@ def create_users(users: List[GoUser], domain: str, config: Config, filename: str
         user_creation_string = 'createAccount ' + base_email + ' \'{CRYPT}' + user.password + \
                                '\' givenName \'' + user.first_name + '\' sn \'' + user.last_name + '\'\n'
         return_string += user_creation_string
-        email_accounts = get_user_email_accounts(user, config)
+        email_accounts = get_user_email_accounts(user, connection, domain)
         for email in email_accounts:
             if email.username != base_email:
                 supp_email_string = ''
@@ -67,19 +66,15 @@ def create_users(users: List[GoUser], domain: str, config: Config, filename: str
     return return_string, supp_email, supp_email_addresses
 
 
-def get_user_email_accounts(user: GoUser, config: Config) -> List[EmAccount]:
+def get_user_email_accounts(user: GoUser, connection: sqlalchemy.engine.Connection, domain:str) -> List[EmAccount]:
     """
     Return a list of the user's e-mail accounts for pratical purposes, as a user can have multiple e-mail accounts
     :param user: the user you want to obtain the list of e-mail accounts of
-    :param config: As there is a db connection, we pass the config class
+    :param connection: the db connection
     :return: a List of e-mail accounts
     """
-    engine = sqlalchemy.create_engine(
-        'mysql+mysqlconnector://' + config.db.user + ':' + config.db.password +
-        '@' + config.db.host + '/' + config.db.database)
-    conn = engine.connect()
-    s = sqlalchemy.select([EmAccount]).where(EmAccount.user_id == user.id).where(EmAccount.username.like('%'+config.domain))
-    result = conn.execute(s)
+    s = sqlalchemy.select([EmAccount]).where(EmAccount.user_id == user.id).where(EmAccount.username.like('%'+domain))
+    result = connection.execute(s)
     return_list = []
     for row in result:
         return_list.append(row)

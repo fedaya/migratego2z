@@ -5,6 +5,7 @@ import sqlalchemy
 from os import path
 import os
 import shutil
+from timeit import default_timer as timer
 
 from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook
 from migratego2z.config import Config
@@ -26,6 +27,7 @@ class Main:
             self.domain = domain
         else:
             self.domain = self.config.domain
+
     def create_temp_structure(self) -> str:
         base_name = '/tmp/migratego2z'
         i = 0
@@ -37,10 +39,11 @@ class Main:
         os.mkdir(path.join(base_name, 'calendars'))
         return base_name
 
-    def delete_temp_structure(self, base_name:str):
+    def delete_temp_structure(self, base_name: str):
         shutil.rmtree(base_name)
 
     def main(self):
+        start = timer()
         engine = sqlalchemy.create_engine('mysql+mysqlconnector://' + self.config.db.user + ':' + self.config.db.password +
                                           '@' + self.config.db.host + '/' + self.config.db.database)
         conn = engine.connect()
@@ -58,14 +61,28 @@ class Main:
         result.close()
         # Create the users
         base_folder = self.create_temp_structure()
-        users_str, supp_email, supp_email_addresses = users.create_users(self.users, self.config.domain, self.config,
+        end = timer()
+        print('First steps took :' + str(end - start))
+        start = timer()
+        users_str, supp_email, supp_email_addresses = users.create_users(self.users, self.config.domain, conn,
                                                                          path.join(base_folder, 'user_creation'))
+        end = timer()
+        print('User creation took :' + str(end - start))
         # Create the folders and import the mails for all users
+        start = timer()
         mails_str = maildir.import_mails(self.emailAccounts, supp_email, supp_email_addresses,
                                       self.config.path, path.join(base_folder, 'mail_copy'))
+        end =timer()
+        print('Mail copy took : ' + str(end - start))
         # Create the folders and imports the contacts
+        start = timer()
         addressbooks_str = self.import_addressbooks(conn, base_folder)
+        end = timer()
+        print('Address books copy took : ' + str(end - start))
+        start = timer()
         calendar_str = self.import_calendars(conn, base_folder)
+        end = timer()
+        print('Calendars copy took : ' + str(end - start))
         conn.close()
 
     def import_addressbooks(self, conn: sqlalchemy.engine.Connection, base_folder:str) -> str:

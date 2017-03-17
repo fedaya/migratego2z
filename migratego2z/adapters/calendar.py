@@ -4,7 +4,6 @@ from typing import List
 import sqlalchemy
 import vobject
 from time import time
-from datetime import timezone
 from datetime import datetime
 
 import urllib
@@ -55,7 +54,6 @@ class Calendar:
                     i_event.add('dtstamp').value = datetime.fromtimestamp(event.ctime, tz=None)
             else:
                 i_event.add('dtstamp').value = datetime(time.time())
-        print(ics.prettyPrint())
         return ics.serialize()
 
 
