@@ -1,8 +1,10 @@
+# -*- coding: utf-8 -*-
 
 from migratego2z.go_db import CalEvent, CalCalendar, EmAccount
 from typing import List
 import sqlalchemy
 import vobject
+from migratego2z.config import ZimbraAdminConfig
 from time import time
 from datetime import datetime
 
@@ -75,19 +77,21 @@ def extract_calendar_list(connection: sqlalchemy.engine.Connection, user: EmAcco
     return return_cals
 
 
-def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: EmAccount, base_name: str) -> str:
+def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: EmAccount,
+                               base_name: str, zimbra: ZimbraAdminConfig) -> (str, str):
     calendars = extract_calendar_list(connection, user)
-    return_string = ""
+    return_zimbra = ""
+    return_script = ""
     for calendar in calendars:
         ical = calendar.get_ical()
         filename = base_name + '.' + calendar.get_calendar().name + '.' + user.username + '.ics'
-        file = open(filename, "wb")
-        file.write(ical.encode('utf-8'))
+        file = open(filename, "w", encoding='utf-8')
+        # file.write(ical.encode('utf-8'))
+        file.write(ical)
         file.close()
-        return_string += "selectMailbox -A "+user.username+"\n"
-        return_string += "createFolder --view appointment \'/Calendar/" + calendar.get_calendar().name + "\'\n"
-        return_string += "postRestUrl \"/Calendar/" + urllib.parse.quote(string=calendar.get_calendar().name,
-                                                                         encoding='ascii',
-                                                                         errors='xmlcharrefreplace') + \
-                         "?fmt=ics\" \"" + filename + "\"\n"
-    return return_string
+        return_zimbra += "selectMailbox -A "+user.username+"\n"
+        return_zimbra += "createFolder --view appointment \"/" + calendar.get_calendar().name + "\"\n"
+        return_script += "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
+                         '/' + urllib.parse.quote(calendar.get_calendar().name) + ' --upload-file \"' + \
+                         filename + '\"\n'
+    return return_zimbra, return_script

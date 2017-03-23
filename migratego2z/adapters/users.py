@@ -5,6 +5,7 @@ from typing import Dict
 import string
 import random
 import re
+import os
 import sqlalchemy
 
 
@@ -12,7 +13,7 @@ def pw_gen(size=8, chars=string.ascii_letters + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
-def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine.Connection, filename: str = None) \
+def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine.Connection, base_folder: str) \
         -> (str, Dict[int, List[str]], List[str]):
     """
     Return Zimbra's creation script for the users specified in parameter
@@ -59,11 +60,12 @@ def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine
         for match in matches:
             if r'{CRYPT}' not in match:
                 return_string = re.sub(match, '', return_string)
-    if filename is not None:
-        user_creation_file = open(filename, 'wb')
-        user_creation_file.write(return_string.encode('utf-8'))
-        user_creation_file.close()
-    return return_string, supp_email, supp_email_addresses
+    filename = os.path.join(base_folder, 'users_creation.zmp')
+    user_creation_file = open(filename, 'w')
+    # user_creation_file.write(return_string.encode('utf-8'))
+    user_creation_file.write(return_string)
+    user_creation_file.close()
+    return filename, return_string, supp_email, supp_email_addresses
 
 
 def get_user_email_accounts(user: GoUser, connection: sqlalchemy.engine.Connection, domain:str) -> List[EmAccount]:

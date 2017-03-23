@@ -1,11 +1,15 @@
+# -*- coding: utf-8 -*-
+
 from migratego2z.go_db import AbAddressbook, AbContact, AbCompany
 import vobject
 import sqlalchemy
 import urllib
 import pprint
+from migratego2z.config import ZimbraAdminConfig
 
 
-def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contactbookname: str, username: str) -> str:
+def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contactbookname: str,
+                 username: str, zimbra: ZimbraAdminConfig) -> (str, str):
     """
     Generates the Addressbook from AbContact LeftJoin AbCompany passed in argument into a vcf file.
 
@@ -13,12 +17,12 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
     :param base_name: The base of output vcf filename, including its full path. Truncated on opening
     :param contactbookname: The contact folder name
     :param username: The username concerned with this extraction (for zimbra's string)
-    :return: Zimbra's insertion string
+    :return: Zimbra's and sh insertion string
     """
+
     filename = base_name + '.' + contactbookname + '.' + username + '.vcf'
-    file = open(filename, 'wb')
+    file = open(filename, 'w', encoding='utf-8')
     file_content = ""
-    return_string = ""
     for contact in contacts:
         card = vobject.vCard()
         card.add('fn')
@@ -84,12 +88,13 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
             card.add('note')
             card.note.value = contact['comment']
         file_content += card.serialize()
-    file.write(file_content.encode('utf-8'))
+    # file.write(file_content.encode('utf-8'))\
+    file.write(file_content)
     file.close()
 
-    return_string = "selectMailbox -A " + username + "\n"
-    return_string += "createFolder --view contact \'/Contacts/" + contactbookname + "\'\n"
-    return_string += "postRestUrl \"/Contacts/" + urllib.parse.quote(string=contactbookname,
-                                                                     encoding='ascii', errors='xmlcharrefreplace') +\
-                     "?fmt=vcf\" \"" + filename + "\"\n"
-    return return_string
+    return_zimbra = "selectMailbox -A " + username + "\n"
+    return_zimbra += "createFolder --view contact \"/" + contactbookname + "\"\n"
+    return_script = "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + username + \
+                         '/' + urllib.parse.quote(contactbookname) + ' --upload-file \"' + \
+                         filename + '\"\n'
+    return return_zimbra, return_script

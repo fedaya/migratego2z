@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import configparser
 
 
@@ -12,8 +13,9 @@ class Config:
         self.path = self.config.get('general', 'rootDir')
         self.domain = self.config.get('general', 'domain')
 
-        self.special_folders = dict()
-        self._special_folders_to_var(self.config.items('special_folders'))
+        self.zimbra = ZimbraAdminConfig(self.config.get('zimbra', 'login'),
+                                        self.config.get('zimbra', 'password'),
+                                        self.config.get('zimbra', 'url'))
 
     def _database_to_var(self, section):
         for item in section:
@@ -37,3 +39,10 @@ class _DatabaseConfig:
         self.user = ''
         self.password = ''
         self.database = ''
+
+
+class ZimbraAdminConfig:
+    def __init__(self, login: str, password: str, url: str):
+        self.login = login
+        self.password = password
+        self.url = url
