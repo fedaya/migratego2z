@@ -1,4 +1,7 @@
 **/__pycache__
 groupofficecom*
-mail_copy
-user_creation
+.idea/*
+.idea
+migratego2z.acigne.fr.ini
+migratego2z.elus-ville-acigne.fr.ini
+migratego2z.xn--acign-fsa.fr.ini
