@@ -90,8 +90,8 @@ def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: E
         file.write(ical)
         file.close()
         return_zimbra += "selectMailbox -A "+user.username+"\n"
-        return_zimbra += "createFolder --view appointment \"/" + calendar.get_calendar().name + "\"\n"
+        return_zimbra += "createFolder --view appointment \"/Calendar/" + calendar.get_calendar().name + "\"\n"
         return_script += "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
-                         '/' + urllib.parse.quote(calendar.get_calendar().name) + ' --upload-file \"' + \
+                         '/Calendar/' + urllib.parse.quote(calendar.get_calendar().name) + '?fmt=ics --upload-file \"' + \
                          filename + '\"\n'
     return return_zimbra, return_script

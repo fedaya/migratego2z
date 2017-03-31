@@ -60,7 +60,7 @@ class MailDir:
         :return: the expected path of the maildir
         """
         if self._parent is None:
-            return '/' + self.name
+            return '/Inbox'
         else:
             return self._parent.get_path() + '/' + self.name
 
@@ -96,6 +96,8 @@ class MailDir:
         #               base_folder + '/' + self._prep_path(self.original_name)
         add_message = 'addMessage --noValidation \"' + self._prep_path(self.get_path()).replace('Spam', 'Junk') + \
                       '\" \"' + base_folder + '/' + self._prep_path(self.original_name)
+        if is_special and self.name != '.':
+            add_message = re.sub(r'/Inbox/', r'/', add_message)
         return_string = add_message + '/cur\"\n'
         return_string += add_message + '/new\"\n'
         return return_string
@@ -164,17 +166,18 @@ def extract_folders(email_account: EmAccount, base_folder: str) -> MailDir:
                         entry not in ['cur', 'new', 'sieve', 'tmp']:
             dir_name = entry
             full_name = dir_name
+            first_part = ''
             # here we split between the first folder name and the subsequents
             matches = re.match('\.([^\.]+)(\..+)?', dir_name)
             cur_mail_dir = base_mail_dir
             while matches is not None:
                 # We'll do a little loop, creating the maildirs, until we have the last one
                 if matches.group(1) != 'INBOX':
+                    first_part += '.' + matches.group(1)
                     # Looking if the folder already exist in memory
                     new_mail_dir = cur_mail_dir.get_child(matches.group(1))
-
                     if new_mail_dir is None:
-                        new_mail_dir = MailDir(matches.group(1), entry, cur_mail_dir)
+                        new_mail_dir = MailDir(matches.group(1), first_part, cur_mail_dir)
                         cur_mail_dir.add_child(new_mail_dir)
                     cur_mail_dir = new_mail_dir
                 dir_name = matches.group(2)

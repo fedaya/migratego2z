@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 from timeit import default_timer as timer
+from typing import List
 
 from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook
 from migratego2z.config import Config
@@ -14,11 +15,13 @@ from migratego2z.adapters import users, maildir, addressbook, calendar
 
 
 class Main:
-    def __init__(self, mdirs: str, domain: str, config: str):
+    def __init__(self, mdirs: str, domain: str, config: str, exclusion_list: List[str] = [None], user: str = None):
         self.users = []
         self.emailAccounts = []
         self.addressBooks = []
         self.contacts = []
+        self.user = user
+        self.excluded_users = exclusion_list
         self.config = Config(config)
         if mdirs is not None:
             self.path = mdirs
@@ -55,7 +58,25 @@ class Main:
         engine = sqlalchemy.create_engine('mysql+mysqlconnector://' + self.config.db.user + ':' +
                                           self.config.db.password + '@' + self.config.db.host + '/' + self.config.db.database)
         conn = engine.connect()
-        s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@'+self.config.domain))
+        if self.excluded_users != [None]:
+            s = sqlalchemy.select([GoUser]).where(GoUser.username.in_(self.excluded_users))
+            results = conn.execute(s)
+            excluded = []
+            for row in results:
+                excluded.append(row.id)
+            s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@' + self.config.domain)). \
+                where(EmAccount.user_id.notin_(excluded))
+
+        elif self.user is None:
+            s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@'+self.config.domain))
+        else:
+            s = sqlalchemy.select([GoUser]).where(GoUser.username.like(self.user))
+            result = conn.execute(s)
+            user = []
+            for row in result:
+                user.append(row.id)
+            s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@' + self.config.domain)).\
+                where(EmAccount.user_id.in_(user))
         result = conn.execute(s)
         userids=[]
         for row in result:
