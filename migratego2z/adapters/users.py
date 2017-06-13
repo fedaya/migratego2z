@@ -33,7 +33,7 @@ def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine
         base_email = user.username + '@' + domain
         user_creation_string = 'createAccount ' + base_email + ' \'{CRYPT}' + user.password + \
                                '\' givenName \'' + user.first_name + '\' sn \'' + user.last_name + '\'\n'
-        user_creation_string += 'modifyAccount ' + base_email + ' userPassword \'{CRYPT}' + user.password + '\'';
+        user_creation_string += 'modifyAccount ' + base_email + ' userPassword \'{CRYPT}' + user.password + '\'\n';
         return_string += user_creation_string
         email_accounts = get_user_email_accounts(user, connection, domain)
         for email in email_accounts:
