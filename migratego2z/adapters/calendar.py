@@ -25,7 +25,7 @@ class Calendar:
         return self._events
 
     def get_events_count(self):
-        return self._events.count()
+        return len(self._events)
 
     def get_event(self, name: str) -> CalEvent:
         for event in self._events:
@@ -45,33 +45,32 @@ class Calendar:
             events = self._events[lb:ub]
 
         for event in events:
-            if portion == -1 or (lb <= i < ub):
-                ics.add('vevent')
-                i_event = ics.contents['vevent'][len(ics.contents['vevent']) - 1]
-                i_event.add('summary').value = event.name
-                start_time = datetime.fromtimestamp(event.start_time, None)
-                end_time = datetime.fromtimestamp(event.end_time, None)
-                i_event.add('dtstart').value = start_time
-                i_event.add('dtend').value = end_time
-                if event.status in ['TENTATIVE', 'CONFIRMED', 'CANCELLED']:
-                    i_event.add('status').value = event.status
-                else:
-                    i_event.add('status').value = 'TENTATIVE'
-                if event.description != '' and event.description is not None:
-                    i_event.add('description').value = event.description
-                if event.location != '' and event.location is not None:
-                    i_event.add('location').value = event.location
-                i_event.add('transp').value = 'OPAQUE' if event.busy == 1 else 'TRANSPARENT'
-                if event.rrule != '' and event.rrule is not None:
-                    i_event.add('rrule').value = event.rrule
-                i_event.add('class').value = 'PUBLIC' if event.private == 0 else 'PRIVATE'
-                i_event.add('uid').value = event.uuid
-                if event.mtime != 0:
-                    i_event.add('dtstamp').value = datetime.fromtimestamp(event.mtime, tz=None)
-                elif event.ctime != 0:
-                        i_event.add('dtstamp').value = datetime.fromtimestamp(event.ctime, tz=None)
-                else:
-                    i_event.add('dtstamp').value = datetime(time.time())
+            ics.add('vevent')
+            i_event = ics.contents['vevent'][len(ics.contents['vevent']) - 1]
+            i_event.add('summary').value = event.name
+            start_time = datetime.fromtimestamp(event.start_time, None)
+            end_time = datetime.fromtimestamp(event.end_time, None)
+            i_event.add('dtstart').value = start_time
+            i_event.add('dtend').value = end_time
+            if event.status in ['TENTATIVE', 'CONFIRMED', 'CANCELLED']:
+                i_event.add('status').value = event.status
+            else:
+                i_event.add('status').value = 'TENTATIVE'
+            if event.description != '' and event.description is not None:
+                i_event.add('description').value = event.description
+            if event.location != '' and event.location is not None:
+                i_event.add('location').value = event.location
+            i_event.add('transp').value = 'OPAQUE' if event.busy == 1 else 'TRANSPARENT'
+            if event.rrule != '' and event.rrule is not None:
+                i_event.add('rrule').value = event.rrule
+            i_event.add('class').value = 'PUBLIC' if event.private == 0 else 'PRIVATE'
+            i_event.add('uid').value = event.uuid
+            if event.mtime != 0:
+                i_event.add('dtstamp').value = datetime.fromtimestamp(event.mtime, tz=None)
+            elif event.ctime != 0:
+                i_event.add('dtstamp').value = datetime.fromtimestamp(event.ctime, tz=None)
+            else:
+                i_event.add('dtstamp').value = datetime(time.time())
         return ics.serialize()
 
 
@@ -115,7 +114,7 @@ def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: E
                              '/Calendar/' + urllib.parse.quote(calendar.get_calendar().name) + '?fmt=ics --upload-file \"' + \
                              filename + '\"\n'
         else:
-            for portion in range(calendar.get_events_count()//499):
+            for portion in range(calendar.get_events_count()//499 + 1):
                 ical = calendar.get_ical(portion)
                 filename = base_name + '.' + calendar.get_calendar().name + '.' + user.username + '.' + str(portion) + '.ics'
                 file = open(filename, "w", encoding='utf-8')
