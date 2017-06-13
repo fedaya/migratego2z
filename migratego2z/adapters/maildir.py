@@ -180,6 +180,8 @@ def extract_folders(email_account: EmAccount, base_folder: str) -> MailDir:
                         new_mail_dir = MailDir(matches.group(1), first_part, cur_mail_dir)
                         cur_mail_dir.add_child(new_mail_dir)
                     cur_mail_dir = new_mail_dir
+                else:
+                    first_part += '.INBOX'
                 dir_name = matches.group(2)
                 if dir_name is not None:
                     matches = re.match('\.([^\.]+)(\..+)?', dir_name)
