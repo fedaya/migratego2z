@@ -191,6 +191,26 @@ def extract_folders(email_account: EmAccount, base_folder: str) -> MailDir:
     return base_mail_dir
 
 
+def import_shares(shares: Dict[str, str], base_folder: str, domain: str) -> (str, str, str, str):
+    mailbox_str = ''
+    sendas_str = ''
+    for share in shares:
+        user = share['user'] + r'@' + domain
+        mailbox_str += 'selectMailbox -a ' + share['email'] + '\n'
+        mailbox_str += 'modifyFolderGrant / account ' + user + ' rwixd\n'
+        mailbox_str += 'selectMailbox -A ' + user + '\n'
+        mailbox_str += 'createMountpoint /' + share['email'] + ' ' + share['email'] + ' /\n'
+        sendas_str += 'grantRight account ' + share['email'] + ' usr ' + user + ' sendAs\n'
+    filenames = [os.path.join(base_folder, 'mail_shares.zmm'), os.path.join(base_folder, 'mail_shares.zmp')]
+    mailbox_file = open(filenames[0], 'w', encoding='utf-8')
+    mailbox_file.write(mailbox_str)
+    mailbox_file.close()
+    sendas_file = open(filenames[1], 'w', encoding='utf-8')
+    sendas_file.write(sendas_str)
+    sendas_file.close()
+    return filenames[0], mailbox_str, filenames[1], sendas_str
+
+
 def import_mails(email_accounts: List[EmAccount], supp_email: Dict[int, List[str]], supp_email_addresses: List[str],
                  root_path: str, base_folder: str) -> (str, str):
     import_str = ''

@@ -283,6 +283,21 @@ class GoUser(Base):
     sort_email_addresses_by_time = Column(Integer, nullable=False, server_default=text("'0'"))
     no_reminders = Column(Integer, nullable=False, server_default=text("'0'"))
 
+
+class GoAcl(Base):
+    __tablename__ = 'go_acl'
+    __table_args__ = (
+        Index('acl_id', 'acl_id', 'user_id'),
+        Index('acl_id_2', 'acl_id', 'group_id')
+    )
+
+    acl_id = Column(Integer, primary_key=True, nullable=False, server_default=text("'0'"))
+    user_id = Column(Integer, primary_key=True, nullable=False, server_default=text("'0'"))
+    group_id = Column(Integer, primary_key=True, nullable=False, server_default=text("'0'"))
+
+    level = Column(Integer, nullable=False, server_default=text("'10'"))
+
+
 class EmAccount(Base):
     __tablename__ = 'em_accounts'
 
@@ -317,3 +332,15 @@ class EmAccount(Base):
     do_not_mark_as_read = Column(Integer, nullable=False, server_default=text("'0'"))
     signature_below_reply = Column(Integer, nullable=False, server_default=text("'0'"))
     full_reply_headers = Column(Integer, nullable=False, server_default=text("'0'"))
+
+
+class PaAlias(Base):
+    __tablename__ = 'pa_aliases'
+
+    id = Column(Integer, primary_key=True)
+    domain_id = Column(Integer, nullable=False, index=True)
+    address = Column(String(190, u'utf8mb4_unicode_ci'), index=True)
+    goto = Column(String(collation=u'utf8mb4_unicode_ci'))
+    ctime = Column(Integer, nullable=False, server_default=text("'0'"))
+    mtime = Column(Integer, nullable=False, server_default=text("'0'"))
+    active = Column(Enum(u'0', u'1'), nullable=False, server_default=text("'1'"))

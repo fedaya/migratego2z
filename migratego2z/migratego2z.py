@@ -9,7 +9,7 @@ import shutil
 from timeit import default_timer as timer
 from typing import List
 
-from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook
+from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook, GoAcl, PaAlias
 from migratego2z.config import Config
 from migratego2z.adapters import users, maildir, addressbook, calendar
 
@@ -18,6 +18,8 @@ class Main:
     def __init__(self, mdirs: str, domain: str, config: str, exclusion_list: List[str] = [None], user: str = None):
         self.users = []
         self.emailAccounts = []
+        self.aliases = []
+        self.shares = []
         self.addressBooks = []
         self.contacts = []
         self.user = user
@@ -59,52 +61,94 @@ class Main:
                                           self.config.db.password + '@' + self.config.db.host + '/' + self.config.db.database)
         conn = engine.connect()
         if self.excluded_users != [None]:
+            # First let's get the list of excluded users ids
             s = sqlalchemy.select([GoUser]).where(GoUser.username.in_(self.excluded_users))
             results = conn.execute(s)
             excluded = []
             for row in results:
                 excluded.append(row.id)
+            # The we get the EmAccount for the domain of not excluded users
             s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@' + self.config.domain)). \
                 where(EmAccount.user_id.notin_(excluded))
 
         elif self.user is None:
+            # If there is no user mentioned and no user excluded
             s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@'+self.config.domain))
         else:
+            # Else, we get the user_id of the mentioned user
             s = sqlalchemy.select([GoUser]).where(GoUser.username.like(self.user))
             result = conn.execute(s)
-            user = []
+            user_id = 0
             for row in result:
-                user.append(row.id)
+                # (There should only be one result)
+                user_id = row.id
+            # And the corresponding EmAccount records
             s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@' + self.config.domain)).\
-                where(EmAccount.user_id.in_(user))
+                where(EmAccount.user_id == user_id)
+        # Once we have the right select statement, we execute it
         result = conn.execute(s)
         userids=[]
         for row in result:
+            # We add every e-mail account in self.emailAccounts
             self.emailAccounts.append(row)
             if row.user_id not in userids:
+                # And the whole list of distinct user_id
                 userids.append(row.user_id)
         result.close()
+        # We query the database for all the users, and put them in self.users
         s = sqlalchemy.select([GoUser]).where(GoUser.id.in_(userids))
         result = conn.execute(s)
         for row in result:
             self.users.append(row)
         result.close()
 
+        # Query the database for active aliases that are not reflective
+        s = sqlalchemy.select([PaAlias]). \
+            where(PaAlias.address.like('%@' + self.config.domain)). \
+            where(PaAlias.goto.like('%@' + self.config.domain)). \
+            where(PaAlias.address != PaAlias.goto). \
+            where(PaAlias.active == u'1')
+        result = conn.execute(s)
+        for alias in result:
+            print(str(alias))
+            self.aliases.append(alias)
+        result.close()
+
+        # The shares are made with the GoAcl. EmAccount has an acl_id, GoAcl has a user_id.
+        # We search for these acl, if the EmAccount.user_id is not the same as the GoUser.id. Those are the shares.
+        # The is one other method for sharing, that is creating another EmAccount for the GoUser;
+        # this is implemented in maildir.import_mails.
+        s = sqlalchemy.select([GoUser.username, EmAccount.username]).select_from(
+            EmAccount.__table__.join(GoAcl.__table__, EmAccount.acl_id == GoAcl.acl_id).join(GoUser.__table__, GoUser.id == GoAcl.user_id)).where(
+            GoAcl.level > 10).where(GoUser.id.in_(userids)).where(GoUser.id != EmAccount.user_id)
+        result = conn.execute(s)
+        for row in result:
+            share = {'user': row[0], 'email': row[1]}
+            self.shares.append(share)
+        result.close()
 
         end = timer()
         logger.write('First steps took: ' + "%.2f" % (end - start) + 's\n')
+
         start = timer()
         # Create the users
         users_creation_file, users_creation, \
-            supp_email, supp_email_addresses = users.create_users(self.users, self.config.domain, conn, base_folder)
+            supp_email, supp_email_addresses = users.create_users(self.users, self.aliases, self.config.domain, conn, base_folder)
         end = timer()
-        logger.write('User creation file generation took: ' + "%.2f" % (end - start) + 's\n')
+        logger.write('User and Aliases creation file generation took: ' + "%.2f" % (end - start) + 's\n')
         # Create the folders and import the mails for all users
         start = timer()
         mail_import_file, mail_import = maildir.import_mails(self.emailAccounts, supp_email, supp_email_addresses,
                                                              self.config.path, base_folder)
         end = timer()
         logger.write('Mail import generation took: ' + "%.2f" % (end - start) + 's\n')
+        start = timer()
+        mail_share_file, mail_share, sendas_file, sendas = maildir.import_shares(self.shares, base_folder,
+                                                                                 self.config.domain)
+        # Insert the mailbox shares before the folders creation
+        mail_import_file.insert(0, mail_share_file)
+        end = timer()
+        logger.write('Mailbox shares import generation took: ' + "%.2f" % (end - start) + 's\n')
         # Create the folders and imports the contacts
         start = timer()
         addressbooks_import_file, addressbooks_import = self.import_addressbooks(conn, base_folder)
@@ -116,7 +160,7 @@ class Main:
         logger.write('Calendars import generation took: ' + "%.2f" % (end - start)  + 's\n')
         conn.close()
         start = timer()
-        script_file, script = self.generate_script(users_creation_file, mail_import_file,
+        script_file, script = self.generate_script(users_creation_file, sendas_file, mail_import_file,
                                                    addressbooks_import_file, calendars_import_file, base_folder,
                                                    log_file)
         end = timer()
@@ -171,7 +215,7 @@ class Main:
         os.chmod(path.join(base_folder, 'calendars_copy.sh'), 0o777)
         return ('calendars_copy.zmm', 'calendars_copy.sh'), (calendars_zimbra, calendars_script)
 
-    def generate_script(self, users_creation: str, mail_import: str, addressbooks_import: (str, str),
+    def generate_script(self, users_creation: str, sendas: str, mail_import: str, addressbooks_import: (str, str),
                         calendars_import: (str, str), base_folder: str, log_file: str) -> (str, str):
         zmprov = "/usr/bin/time /opt/zimbra/bin/zmprov -v -z -f {file}"
         zmmailbox = "/usr/bin/time /opt/zimbra/bin/zmmailbox -v -z -f {file}"
@@ -182,6 +226,7 @@ class Main:
         script = "#!/bin/sh\n"
         script += 'echo "' + re.sub(r'\{desc\}', "User creation", deco) + '"' + eol
         script += re.sub(r'\{file\}', users_creation, zmprov) + eol
+        script += re.sub(r'\{file\}', sendas, zmprov) + eol
         script += 'echo "' + re.sub(r'\{desc\}', "End of user creation", deco) + '\n' + '"' + eol
         script += 'echo "' + re.sub(r'\{desc\}', "Mail import", deco) + '"' + eol
         for file in mail_import:

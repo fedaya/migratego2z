@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from migratego2z.go_db import GoUser, EmAccount
+from migratego2z.go_db import GoUser, EmAccount, PaAlias
 from typing import List
 from typing import Dict
 import string
@@ -13,13 +13,14 @@ def pw_gen(size=8, chars=string.ascii_letters + string.digits):
     return ''.join(random.choice(chars) for _ in range(size))
 
 
-def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine.Connection, base_folder: str) \
+def create_users(users: List[GoUser], aliases: List[PaAlias], domain: str, connection: sqlalchemy.engine.Connection, base_folder: str) \
         -> (str, Dict[int, List[str]], List[str]):
     """
     Return Zimbra's creation script for the users specified in parameter
     Also creates a file with the same information if a filename is specified
 
     :param users: List of users you want to create
+    :param aliases: List of users aliases (goto is the user, address is the alias
     :param domain: E-mail domain for target user
     :param connection: The db connection
     :param filename: if specified, this file is written with Zimbra's creation script
@@ -33,7 +34,7 @@ def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine
         base_email = user.username + '@' + domain
         user_creation_string = 'createAccount ' + base_email + ' \'{CRYPT}' + user.password + \
                                '\' givenName \'' + user.first_name + '\' sn \'' + user.last_name + '\'\n'
-        user_creation_string += 'modifyAccount ' + base_email + ' userPassword \'{CRYPT}' + user.password + '\'\n';
+        user_creation_string += 'modifyAccount ' + base_email + ' userPassword \'{CRYPT}' + user.password + '\'\n'
         return_string += user_creation_string
         email_accounts = get_user_email_accounts(user, connection, domain)
         for email in email_accounts:
@@ -46,8 +47,13 @@ def create_users(users: List[GoUser], domain: str, connection: sqlalchemy.engine
                     supp_email[email.user_id].append(email.username)
                 else:
                     supp_email[email.user_id] = [email.username]
-                supp_email_string += 'grantRight account ' + email.username + ' usr ' + base_email + ' sendAs\n'
-                return_string += supp_email_string
+                    # The sendAs property. We'll complete this afterwards with the generated shares in maildir.py
+                    supp_email_string += 'grantRight account ' + email.username + ' usr ' + base_email + ' sendAs\n'
+                    return_string += supp_email_string
+            # I Just hope you don't have too many aliases, cause ... n³
+            for alias in aliases:
+                if alias.goto == email.username:
+                    return_string += 'addAccountAlias ' + email.username + ' ' + alias.address + '\n'
     matches = re.findall('(createAccount [^ ]+\@[^ ]+)[^\n]*\n', return_string)
     seen = []
     duplicates = []
