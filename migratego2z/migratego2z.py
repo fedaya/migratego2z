@@ -78,13 +78,12 @@ class Main:
             # Else, we get the user_id of the mentioned user
             s = sqlalchemy.select([GoUser]).where(GoUser.username.like(self.user))
             result = conn.execute(s)
-            user_id = 0
+            user_id = []
             for row in result:
-                # (There should only be one result)
-                user_id = row.id
+                user_id.append(row.id)
             # And the corresponding EmAccount records
             s = sqlalchemy.select([EmAccount]).where(EmAccount.username.like('%@' + self.config.domain)).\
-                where(EmAccount.user_id == user_id)
+                where(EmAccount.user_id.in_(user_id))
         # Once we have the right select statement, we execute it
         result = conn.execute(s)
         userids=[]

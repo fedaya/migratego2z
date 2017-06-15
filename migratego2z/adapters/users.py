@@ -48,8 +48,8 @@ def create_users(users: List[GoUser], aliases: List[PaAlias], domain: str, conne
                 else:
                     supp_email[email.user_id] = [email.username]
                     # The sendAs property. We'll complete this afterwards with the generated shares in maildir.py
-                    supp_email_string += 'grantRight account ' + email.username + ' usr ' + base_email + ' sendAs\n'
-                    return_string += supp_email_string
+                supp_email_string += 'grantRight account ' + email.username + ' usr ' + base_email + ' sendAs\n'
+                return_string += supp_email_string
             # I Just hope you don't have too many aliases, cause ... n³
             for alias in aliases:
                 if alias.goto == email.username:
@@ -82,7 +82,7 @@ def get_user_email_accounts(user: GoUser, connection: sqlalchemy.engine.Connecti
     :param connection: the db connection
     :return: a List of e-mail accounts
     """
-    s = sqlalchemy.select([EmAccount]).where(EmAccount.user_id == user.id).where(EmAccount.username.like('%'+domain))
+    s = sqlalchemy.select([EmAccount]).where(EmAccount.user_id == user.id).where(EmAccount.username.like('%@'+domain))
     result = connection.execute(s)
     return_list = []
     for row in result:
