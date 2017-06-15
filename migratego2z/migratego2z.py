@@ -227,6 +227,9 @@ class Main:
         script += re.sub(r'\{file\}', users_creation, zmprov) + eol
         script += re.sub(r'\{file\}', sendas, zmprov) + eol
         script += 'echo "' + re.sub(r'\{desc\}', "End of user creation", deco) + '\n' + '"' + eol
+        script += 'echo "' + re.sub(r'\{desc\}', "Please Reroute the e-mails now before going further", deco) + '"\n'
+        script += 'echo "' + re.sub(r'\{desc\}', 'Press any key to continue...', deco) + '"\n'
+        script += 'read a\n'
         script += 'echo "' + re.sub(r'\{desc\}', "Mail import", deco) + '"' + eol
         for file in mail_import:
             script += re.sub(r'\{file\}', file, zmmailbox) + eol

@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='migrate-go2z',
-    version='0.9.2',
+    version='0.9.3',
     url='',
     license='',
     author='Etienne Gille',
