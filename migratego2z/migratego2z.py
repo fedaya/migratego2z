@@ -110,7 +110,6 @@ class Main:
             where(PaAlias.active == u'1')
         result = conn.execute(s)
         for alias in result:
-            print(str(alias))
             self.aliases.append(alias)
         result.close()
 
