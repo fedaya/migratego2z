@@ -234,6 +234,20 @@ class CalParticipant(Base):
     is_organizer = Column(Integer, nullable=False, server_default=text("'0'"))
     role = Column(String(100), nullable=False, server_default=text("''"))
 
+class GoGroup(Base):
+    __tablename__ = 'go_groups'
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50, u'utf8mb4_unicode_ci'), nullable=False)
+    user_id = Column(Integer, nullable=False, server_default=text("'0'"))
+    acl_id = Column(Integer, nullable=False)
+    admin_only = Column(Integer, nullable=False, server_default=text("'0'"))
+
+class GoUsersGroup(Base):
+    __tablename__ = 'go_users_groups'
+
+    group_id = Column(Integer, primary_key=True, nullable=False, server_default=text("'0'"))
+    user_id = Column(Integer, primary_key=True, nullable=False, server_default=text("'0'"))
 
 class GoUser(Base):
     __tablename__ = 'go_users'

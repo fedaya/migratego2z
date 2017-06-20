@@ -9,7 +9,7 @@ import shutil
 from timeit import default_timer as timer
 from typing import List
 
-from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook, GoAcl, PaAlias
+from migratego2z.go_db import EmAccount, AbCompany, AbContact, GoUser, AbAddressbook, GoAcl, PaAlias, GoUsersGroup, GoGroup
 from migratego2z.config import Config
 from migratego2z.adapters import users, maildir, addressbook, calendar
 
@@ -23,6 +23,8 @@ class Main:
         self.addressBooks = []
         self.contacts = []
         self.user = user
+        self.users_groups = {}
+        self.groups_users = {}
         self.excluded_users = exclusion_list
         self.config = Config(config)
         if mdirs is not None:
@@ -95,10 +97,21 @@ class Main:
                 userids.append(row.user_id)
         result.close()
         # We query the database for all the users, and put them in self.users
-        s = sqlalchemy.select([GoUser]).where(GoUser.id.in_(userids))
+        s = sqlalchemy.select([GoUser]).where(GoUser.id.in_(userids)).where(GoUser.enabled == 1)
         result = conn.execute(s)
         for row in result:
             self.users.append(row)
+        result.close()
+
+        # Associate groups and users and vice-versa
+        s = sqlalchemy.select([GoUsersGroup]).\
+            where(GoUsersGroup.user_id.in_(userids))
+        result = conn.execute(s)
+        for row in result:
+            if row.user_id in self.users_groups:
+                self.users_groups[row.user_id].append(row.group_id)
+            else:
+                self.users_groups[row.user_id] = [row.group_id]
         result.close()
 
         # Query the database for active aliases that are not reflective
@@ -118,7 +131,7 @@ class Main:
         # this is implemented in maildir.import_mails.
         s = sqlalchemy.select([GoUser.username, EmAccount.username]).select_from(
             EmAccount.__table__.join(GoAcl.__table__, EmAccount.acl_id == GoAcl.acl_id).join(GoUser.__table__, GoUser.id == GoAcl.user_id)).where(
-            GoAcl.level > 10).where(GoUser.id.in_(userids)).where(GoUser.id != EmAccount.user_id)
+            GoAcl.level > 10).where(GoUser.id.in_(userids)).where(GoUser.id != EmAccount.user_id).where(GoUser.enabled == 1)
         result = conn.execute(s)
         for row in result:
             share = {'user': row[0], 'email': row[1]}
@@ -173,15 +186,15 @@ class Main:
                              open(path.join(base_folder, 'contacts_copy.sh'), 'w', encoding='utf-8'))
         addressbooks_zimbra = ''
         addressbooks_script = '#!/bin/sh\n'
-        for user in self.emailAccounts:
-            s = sqlalchemy.select([AbAddressbook]).where(AbAddressbook.user_id == user.user_id)
+        for user in self.users:
+            s = sqlalchemy.select([AbAddressbook]).where(AbAddressbook.user_id == user.id)
             result = conn.execute(s)
             for row in result:
                 s2 = sqlalchemy.select([AbContact, AbCompany.name], AbContact.addressbook_id == row.id,
                                        AbContact.__table__.outerjoin(AbCompany, AbContact.company_id == AbCompany.id))
                 r2 = conn.execute(s2)
                 line = addressbook.generate_vcf(r2, path.join(base_folder, 'contacts', 'contacts'),
-                                                row.name, user.username, self.config.zimbra)
+                                                row.name, user, self.config)
                 addressbooks_zimbra += line[0]
                 addressbooks_script += line[1]
                 r2.close()
@@ -199,10 +212,10 @@ class Main:
 
         calendars_zimbra = ''
         calendars_script = '#!/bin/sh\n'
-        for user in self.emailAccounts:
+        for user in self.users:
             line = calendar.export_calendars_from_user(conn, user, os.path.join(base_folder, 'calendars',
                                                                                           'calendars'),
-                                                       self.config.zimbra)
+                                                       self.config, self.users_groups[user.id])
             calendars_zimbra += line[0]
             calendars_script += line[1]
         # calendars_file.write(calendars_str.encode('utf-8'))

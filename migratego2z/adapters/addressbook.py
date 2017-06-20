@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 
-from migratego2z.go_db import AbAddressbook, AbContact, AbCompany
+from migratego2z.go_db import AbAddressbook, AbContact, AbCompany, GoUser
 import vobject
 import sqlalchemy
 import urllib
 import pprint
-from migratego2z.config import ZimbraAdminConfig
+from migratego2z.config import Config
 
 
 def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contactbookname: str,
-                 username: str, zimbra: ZimbraAdminConfig) -> (str, str):
+                 user: GoUser, config: Config) -> (str, str):
     """
     Generates the Addressbook from AbContact LeftJoin AbCompany passed in argument into a vcf file.
 
@@ -20,9 +20,10 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
     :return: Zimbra's and sh insertion string
     """
 
-    filename = base_name + '.' + contactbookname + '.' + username + '.vcf'
+    filename = base_name + '.' + contactbookname + '.' + user.username + '.vcf'
     file = open(filename, 'w', encoding='utf-8')
     file_content = ""
+    zimbra = config.zimbra
     for contact in contacts:
         card = vobject.vCard()
         card.add('fn')
@@ -92,9 +93,9 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
     file.write(file_content)
     file.close()
 
-    return_zimbra = "selectMailbox -A " + username + "\n"
+    return_zimbra = "selectMailbox -A " + user.username + r'@' + config.domain + "\n"
     return_zimbra += "createFolder --view contact \"/Contacts/" + contactbookname + "\"\n"
-    return_script = "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + username + \
+    return_script = "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
                          '/Contacts/' + urllib.parse.quote(contactbookname) + '?fmt=vcf --upload-file \"' + \
                          filename + '\"\n'
     return return_zimbra, return_script
