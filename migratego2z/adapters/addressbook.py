@@ -95,7 +95,7 @@ def generate_vcf(contacts: sqlalchemy.engine.ResultProxy, base_name: str, contac
 
     return_zimbra = "selectMailbox -A " + user.username + r'@' + config.domain + "\n"
     return_zimbra += "createFolder --view contact \"/Contacts/" + contactbookname + "\"\n"
-    return_script = "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
+    return_script = "/usr/bin/curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
                          '/Contacts/' + urllib.parse.quote(contactbookname) + '?fmt=vcf --upload-file \"' + \
                          filename + '\"\n'
     return return_zimbra, return_script

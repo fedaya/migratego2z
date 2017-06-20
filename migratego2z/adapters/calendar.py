@@ -138,7 +138,7 @@ def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: G
             # file.write(ical.encode('utf-8'))
             file.write(ical)
             file.close()
-            return_script += "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
+            return_script += "/usr/bin/curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
                              '/Calendar/' + urllib.parse.quote(calendar.get_calendar().name) + '?fmt=ics --upload-file \"' + \
                              filename + '\"\n'
         else:
@@ -149,7 +149,7 @@ def export_calendars_from_user(connection: sqlalchemy.engine.Connection, user: G
                 # file.write(ical.encode('utf-8'))
                 file.write(ical)
                 file.close()
-                return_script += "curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
+                return_script += "/usr/bin/curl -k -v -u " + zimbra.login + ":" + zimbra.password + " " + zimbra.url + user.username + \
                                  '/Calendar/' + urllib.parse.quote(calendar.get_calendar().name) + '?fmt=ics --upload-file \"' + \
                                  filename + '\"\n'
         return_zimbra += "selectMailbox -A " + user.username + r'@' + config.domain + "\n"

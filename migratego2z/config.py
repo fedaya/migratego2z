@@ -13,9 +13,12 @@ class Config:
         self.path = self.config.get('general', 'rootDir')
         self.domain = self.config.get('general', 'domain')
 
+        self.goserver = self.config.get('general', 'goserver')
+
         self.zimbra = ZimbraAdminConfig(self.config.get('zimbra', 'login'),
                                         self.config.get('zimbra', 'password'),
-                                        self.config.get('zimbra', 'url'))
+                                        self.config.get('zimbra', 'url'),
+                                        self.config.get('zimbra', 'server'))
 
     def _database_to_var(self, section):
         for item in section:
@@ -42,7 +45,8 @@ class _DatabaseConfig:
 
 
 class ZimbraAdminConfig:
-    def __init__(self, login: str, password: str, url: str):
+    def __init__(self, login: str, password: str, url: str, server: str):
         self.login = login
         self.password = password
         self.url = url
+        self.server = server

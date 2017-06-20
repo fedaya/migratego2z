@@ -53,7 +53,6 @@ class Main:
     def main(self):
         start = timer()
         base_folder = self.create_temp_structure()
-        print(base_folder)
         log_file = path.join(base_folder, 'import.log')
         logger = open(log_file, 'w', encoding='utf-8')
         logger.write('=' * 80 + '\n')
@@ -170,16 +169,35 @@ class Main:
         end = timer()
         logger.write('Calendars import generation took: ' + "%.2f" % (end - start)  + 's\n')
         conn.close()
+
+        start = timer()
+        domain_state_change = self.change_domain_states(base_folder)
+        end = timer()
+        logger.write('Domain states change generation took: ' + "%.2f" % (end - start) + 's\n')
+
         start = timer()
         script_file, script = self.generate_script(users_creation_file, sendas_file, mail_import_file,
-                                                   addressbooks_import_file, calendars_import_file, base_folder,
-                                                   log_file)
+                                                   addressbooks_import_file, calendars_import_file, domain_state_change,
+                                                   base_folder, log_file)
+        launch_script = self.generate_launch_script(base_folder, script_file, log_file)
         end = timer()
         logger.write('Script creation took : ' + "%.2f" % (end - start) + 's\n')
         logger.write('=' * 80 + '\n')
         logger.write('End of initial steps\n')
         logger.write('=' * 80 + '\n\n')
         logger.close()
+        print('Migration scripts have been successfully created.')
+
+        exec_pbs, exec_str = self.race_conditions()
+        if not exec_pbs == 0:
+            if exec_pbs > 1:
+                print('Before launching the migration resolve these ' + str(exec_pbs) + ' problems:')
+            else:
+                print('Before launching the migration resolve this problem:')
+            print(exec_str)
+        else:
+            print('Everything is set for the migration.\n')
+        print('You can launch the migration with the command: ' + launch_script)
 
     def import_addressbooks(self, conn: sqlalchemy.engine.Connection, base_folder: str) -> (str, str):
         addressbooks_file = (open(path.join(base_folder, 'contacts_copy.zmm'), 'w', encoding='utf-8'),
@@ -227,7 +245,8 @@ class Main:
         return ('calendars_copy.zmm', 'calendars_copy.sh'), (calendars_zimbra, calendars_script)
 
     def generate_script(self, users_creation: str, sendas: str, mail_import: str, addressbooks_import: (str, str),
-                        calendars_import: (str, str), base_folder: str, log_file: str) -> (str, str):
+                        calendars_import: (str, str), domain_state_change: str, base_folder: str,
+                        log_file: str) -> (str, str):
         zmprov = "/usr/bin/time /opt/zimbra/bin/zmprov -v -z -f {file}"
         zmmailbox = "/usr/bin/time /opt/zimbra/bin/zmmailbox -v -z -f {file}"
         bash = "/usr/bin/time ./{file}"
@@ -239,9 +258,16 @@ class Main:
         script += re.sub(r'\{file\}', users_creation, zmprov) + eol
         script += re.sub(r'\{file\}', sendas, zmprov) + eol
         script += 'echo "' + re.sub(r'\{desc\}', "End of user creation", deco) + '\n' + '"' + eol
-        script += 'echo "' + re.sub(r'\{desc\}', "Please Reroute the e-mails now before going further", deco) + '"\n'
-        script += 'echo "' + re.sub(r'\{desc\}', 'Press any key to continue...', deco) + '"\n'
-        script += 'read a\n'
+
+        # script += 'echo "' + re.sub(r'\{desc\}', "Please Reroute the e-mails now before going further", deco) + '"\n'
+        # script += 'echo "' + re.sub(r'\{desc\}', 'Press any key to continue...', deco) + '"\n'
+        # script += 'read a\n'
+
+        script += 'echo "' + re.sub(r'\{desc\}', "Changing the domain states on both servers", deco) + '"' + eol
+        script += re.sub(r'\{file\}', domain_state_change, bash) + eol
+        script += 'echo "' + re.sub(r'\{desc\}', "Domain states should be changed on the servers",
+                                    deco) + '\n' + '"' + eol
+
         script += 'echo "' + re.sub(r'\{desc\}', "Mail import", deco) + '"' + eol
         for file in mail_import:
             script += re.sub(r'\{file\}', file, zmmailbox) + eol
@@ -266,5 +292,84 @@ class Main:
         script_file.close()
         os.chmod(script_name, 0o777)
         return script_name, script
+
+    def change_domain_states(self, base_folder):
+        query = 'UPDATE pa_domains SET active=0 WHERE domain=\'' + self.config.domain + '\'\n'
+        sql_name = path.join(base_folder, 'deactivate_domain.sql')
+        sql_file = open(sql_name, 'w', encoding='utf-8')
+        sql_file.write(query)
+        sql_file.close()
+
+        db = self.config.db
+        zmprov = "/usr/bin/time /opt/zimbra/bin/zmprov -v -z -f {file}"
+
+        domain = self.config.domain
+        md_script  = 'md ' + domain + 'zimbraMailCatchAllAddress ""\n'
+        md_script += 'md ' + domain + 'zimbraMailCatchAllForwardingAddress ""\n'
+        md_script += 'md ' + domain + 'zimbraMailTransport lmtp:' + self.config.zimbra.server + ':7025\n'
+
+        md_name = path.join(base_folder, 'disable_relaying.zmp')
+        md_file = open(md_name, 'w', encoding='utf-8')
+        md_file.write(md_script)
+        md_file.close()
+
+        script = '#!/bin/sh\n'
+
+        script += '/usr/bin/mysql --host=' + db.host + ' --user=' + db.user + ' --password=' + db.password + \
+                  ' --database=' + db.database + r' --force <' + sql_name + '\n'
+        script += r'ssh root@' + self.config.goserver + ' "/etc/init.d/postfix reload"' + '\n'
+        script += re.sub(r'\{file\}', md_name, zmprov) + '\n'
+        script_name = path.join(base_folder, 'change_domain_states.sh')
+        script_file = open(script_name, 'w', encoding='utf-8')
+        script_file.write(script)
+        script_file.close()
+
+        return 'change_domain_states.sh'
+
+
+    def generate_launch_script(self, base_folder, migrate_script, log_file):
+        script  = '#!/bin/sh\n'
+        script += 'echo This script will launch the migration as a daemon and display the log file as it grows\n'
+        script += 'echo Press any key to start or Ctrl+C to cancel...\n'
+        script += 'read a\n'
+        script += '/usr/bin/screen -dmS migratego2z ' + migrate_script +'\n'
+        script += '/usr/bin/tail -f ' + log_file +'\n'
+
+        script_name = path.join(base_folder, 'launch.sh')
+        script_file = open(script_name, 'w', encoding='utf-8')
+        script_file.write(script)
+        script_file.close()
+
+        return script_name
+
+    def race_conditions(self):
+        executables = [
+            '/bin/sh',
+            '/usr/bin/mysql',
+            '/usr/bin/curl',
+            '/usr/bin/ssh',
+            '/usr/bin/screen',
+            '/usr/bin/time',
+            '/opt/zimbra/bin/zmprov',
+            '/opt/zimbra/bin/zmmailbox'
+        ]
+        return_string = ''
+        return_pbs = 0
+        for executable in executables:
+            if not (path.exists(executable) and os.access(executable, os.X_OK)):
+                return_string += ' - ' + executable + ' doesn\'t exist or is not executable\n'
+                return_pbs += 1
+        return return_pbs, return_string
+
+        print('Please make sure:')
+        print(' 1 - You run this migration on a Zimbra server')
+        print(' 2 - Zimbra is installed on the default path: /opt/zimbra')
+        print(' 3 - ssh is available and you can login on Group-Office\'s server as root without password')
+        print(' 4 - mysql client is available in /usr/bin')
+        print(' 5 - time utility is available in /usr/bin')
+        print(' 6 - sh is available in /bin')
+        print(' 7 - screen is available in /usr/bin')
+        print(' 8 - curl is available in /usr/bin')
+
 
 
